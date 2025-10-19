@@ -1,0 +1,5 @@
+venv/
+settings.env
+test.py
+session.session
+qdrant/
