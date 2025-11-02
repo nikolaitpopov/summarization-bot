@@ -1,4 +1,4 @@
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Optional
 from datetime import datetime, timezone
 import asyncio
 from dotenv import load_dotenv
@@ -6,8 +6,6 @@ import os
 
 from telethon import TelegramClient
 # pip install telethon
-
-from dotenv import load_dotenv
 
 load_dotenv("settings.env")
 
@@ -20,16 +18,19 @@ def _parse_date(dt: Union[datetime, str]) -> datetime:
     if isinstance(dt, datetime):
         return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
     # ожидается ISO-строка, например "2025-10-19T12:00:00"
-    return datetime.fromisoformat(dt)
+    parsed_date = datetime.fromisoformat(dt)
+    return parsed_date.replace(tzinfo=timezone.utc) if parsed_date.tzinfo is None else parsed_date
 
 
 async def get_channel_messages_after(channel_id: Union[int, str],
-                                     last_summary_date: Union[datetime, str]) -> List[Dict]:
+                                     start_date: Union[datetime, str],
+                                     end_date: Optional[Union[datetime, str]] = None) -> List[Dict]:
     """
-    Возвращает список сообщений канала newer than last_summary_date.
+    Возвращает список сообщений канала в пределах заданного периода (start_date и end_date).
     result: [{'date': '2025-10-19T12:34:56+00:00', 'text': '...'}, ...]
     """
-    since = _parse_date(last_summary_date)
+    since = _parse_date(start_date)
+    until = _parse_date(end_date) if end_date else None
     results: List[Dict] = []
 
     async with TelegramClient(SESSION_PATH, API_ID, API_HASH) as client:
@@ -42,8 +43,10 @@ async def get_channel_messages_after(channel_id: Union[int, str],
             msg_date = msg.date.astimezone(timezone.utc)
             if msg_date <= since:
                 break
+            if until and msg_date > until:
+                continue
             text = msg.message or ''
-            results.append({'date': msg.date.isoformat(), 'text': text})
+            results.append({'date': msg_date.isoformat(), 'text': text})
 
     # вернуть в хронологическом порядке (от старых к новым)
     results.reverse()
@@ -54,8 +57,9 @@ async def get_channel_messages_after(channel_id: Union[int, str],
 if __name__ == '__main__':
     async def main():
         channel = '@muzika_chtivo'  # или numeric id, или '@username'
-        last = '2025-10-18T00:00:00'  # пример
-        msgs = await get_channel_messages_after(channel, last)
+        start = '2025-10-18T00:00:00'  # начало периода
+        end = '2025-10-19T00:00:00'    # конец периода
+        msgs = await get_channel_messages_after(channel, start, end)
         for m in msgs:
             print(m['date'], m['text'][:80])
 
